@@ -1,0 +1,115 @@
+initialize() {
+ initializeMutationRate(1e-6);
+ initializeMutationType("m1", 0.5, "f", 0.0); // neutral
+ initializeMutationType("m2", 0.5, "g", 0.1, 0.05); // QTLs
+ initializeMutationType("m3", 0.5, "g", -0.1, 0.05); // QTLs
+ m2.convertToSubstitution = F;
+ m3.convertToSubstitution = F;
+ initializeGenomicElementType("g1", m1, 1);
+ initializeGenomicElementType("g2", c(m2,m3), c(1, 1));
+ defineConstant("h2", 0.5); 
+ defineConstant("nChr", 20);
+ n = 1;
+ rates = c();
+ ends = c();
+ while (n < nChr+1) {
+     initializeGenomicElement(g1, (n-1)*50000,n*50000-20000);
+     initializeGenomicElement(g2, n*50000-19999,n*50000-10000); 
+     initializeGenomicElement(g1, n*50000-9999,n*50000-1);
+     ends = c(ends, n*50000-1);
+     rates = c(rates,2e-3);
+     ends = c(ends, n*50000);
+     rates = c(rates, 0.5);
+     n = n+1;
+ }
+ 
+ initializeRecombinationRate(rates, ends);
+ 
+}  
+
+
+mutationEffect(m2) { return 1.0; }
+mutationEffect(m3) { return 1.0; }
+
+1 early() { sim.addSubpop("p1", 500); }
+
+
+1:4000 late() {
+
+    // sum the additive effects of QTLs
+    inds = sim.subpopulations.individuals;
+    additive = inds.sumOfMutationsOfType(m2);
+    additive = additive+inds.sumOfMutationsOfType(m3);
+
+    // model environmental variance, according to the target heritability
+    V_A = mean((additive)^2) - mean(additive)^2;
+    V_E = (V_A - h2 * V_A) / h2; // from h2 == V_A / (V_A + V_E)
+    defineGlobal("lastV_E",V_E); 
+    env = rnorm(size(inds), 0.0, sqrt(V_E));
+
+    // set fitness effects and remember phenotypes
+    phenotypes = additive + env;
+    myS = 0.001*S*sqrt(V_A+V_E);
+    fits = 1 - (3-phenotypes)^2 * myS;
+    inds.fitnessScaling = ifelse(fits < 0.0, 0.0, fits);
+    //inds.fitnessScaling = 1.;
+}
+
+4000 late() {
+    sim.outputMutations(sim.mutationsOfType(m1),filePath='../simOut/BtoA/Pop.'+simID+'.S.'+S+'.txt',append=T);
+    sim.outputMutations(sim.mutationsOfType(m2),filePath='../simOut/BtoA/Pop.'+simID+'.S.'+S+'.txt',append=T);
+    sim.outputMutations(sim.mutationsOfType(m3),filePath='../simOut/BtoA/Pop.'+simID+'.S.'+S+'.txt',append=T);
+}
+
+4001 early() {
+    sim.addSubpopSplit("p2", 2, p1);
+    sim.addSubpopSplit("p3", 2, p1);
+    sim.addSubpopSplit("p4", 2, p1);
+    sim.addSubpopSplit("p5", 2, p1);
+    sim.addSubpopSplit("p6", 2, p1);
+    //sim.chromosome.setMutationRate(0.0);
+    //sim.chromosome.setRecombinationRate(5e-1);
+}
+
+
+4001: early() {
+    sim.chromosome.setMutationRate(0.0);
+}
+
+4002 early() {
+     sim.outputMutations(sim.mutationsOfType(m1),filePath='../simOut/BtoA/Before.'+simID+'.S.'+S+'.txt',append=T);
+     sim.outputMutations(sim.mutationsOfType(m2),filePath='../simOut/BtoA/Before.'+simID+'.S.'+S+'.txt',append=T);
+     sim.outputMutations(sim.mutationsOfType(m3),filePath='../simOut/BtoA/Before.'+simID+'.S.'+S+'.txt',append=T);
+     p2.setSubpopulationSize(100); 
+     p3.setSubpopulationSize(100); 
+     p4.setSubpopulationSize(100); 
+     p5.setSubpopulationSize(100); 
+     p6.setSubpopulationSize(100); 
+}
+
+
+4002:4003 late() {
+
+        inds = sim.subpopulations.individuals;
+        additive = inds.sumOfMutationsOfType(m2);
+        additive = additive+inds.sumOfMutationsOfType(m3);
+    
+        // model environmental variance, according to the target heritability
+        V_A = mean((additive)^2) - mean(additive)^2;
+        //V_E = (V_A - h2 * V_A) / h2; // from h2 == V_A / (V_A + V_E)
+        env = rnorm(size(inds), 0.0, sqrt(lastV_E));
+ 
+        // set fitness effects and remember phenotypes
+        phenotypes = additive + env;
+        fits = phenotypes;
+        inds.fitnessScaling = ifelse(fits > 0.0, fits, 0.0);
+        //print(inds.fitnessScaling);
+}
+
+4003 late() {
+
+        sim.outputMutations(sim.mutationsOfType(m1),filePath='../simOut/BtoA/After.'+simID+'.S.'+S+'.txt',append=T);;
+        sim.outputMutations(sim.mutationsOfType(m2),filePath='../simOut/BtoA/After.'+simID+'.S.'+S+'.txt',append=T);;
+        sim.outputMutations(sim.mutationsOfType(m3),filePath='../simOut/BtoA/After.'+simID+'.S.'+S+'.txt',append=T);;
+}
+

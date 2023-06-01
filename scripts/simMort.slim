@@ -1,0 +1,67 @@
+initialize() {
+ initializeMutationRate(1e-6);
+ initializeMutationType("m1", 0.5, "f", 0.0); // neutral
+ initializeMutationType("m2", 0.5, "g", 0.1, 0.05); // QTLs
+ initializeMutationType("m3", 0.5, "g", -0.1, 0.05); // QTLs
+ m2.convertToSubstitution = F;
+ m3.convertToSubstitution = F;
+ initializeGenomicElementType("g1", c(m1,m2,m3), c(0.9,0.05,0.05));
+ //initializeGenomicElementType("g2", c(m2,m3), c(1, 1));
+ defineConstant("h2", 0.5); 
+ defineConstant("nChr", 20);
+ n = 1;
+ rates = c();
+ ends = c();
+ initializeGenomicElement(g1, 0,999999);
+ while (n < nChr+1) {
+     //if(runif(1) >0.5) {
+     //    initializeGenomicElement(g2, n*50000-19999,n*50000-10000); 
+     //} else {
+     //    initializeGenomicElement(g1, n*50000-19999,n*50000-10000); 
+     //}
+     //initializeGenomicElement(g1, n*50000-9999,n*50000-1);
+     ends = c(ends, n*50000-1);
+     rates = c(rates,1e-4);
+     ends = c(ends, n*50000);
+     rates = c(rates, 0.5);
+     n = n+1;
+ }
+ 
+ initializeRecombinationRate(rates, ends);
+ 
+}  
+
+
+mutationEffect(m2) { return 1.0; }
+mutationEffect(m3) { return 1.0; }
+
+1 early() { sim.addSubpop("p1", 500); }
+
+
+1:4000 late() {
+
+    // sum the additive effects of QTLs
+    inds = sim.subpopulations.individuals;
+    additive = inds.sumOfMutationsOfType(m2);
+    additive = additive+inds.sumOfMutationsOfType(m3);
+
+    // model environmental variance, according to the target heritability
+    V_A = mean((additive)^2) - mean(additive)^2;
+    V_E = (V_A - h2 * V_A) / h2; // from h2 == V_A / (V_A + V_E)
+    defineGlobal("lastV_E",V_E); 
+    env = rnorm(size(inds), 0.0, sqrt(V_E));
+
+    // set fitness effects and remember phenotypes
+    phenotypes = additive + env;
+    myS = 0.001*S*sqrt(V_A+V_E);
+    fits = 1 - (3-phenotypes)^2 * myS;
+    inds.fitnessScaling = ifelse(fits < 0.0, 0.0, fits);
+    //inds.fitnessScaling = 1.;
+}
+
+4000 late() {
+    inds = p1.sampleIndividuals(500);
+    g = inds.genomes;
+    g.outputVCF("../simOut/BtoA/vcfs/geno.S."+S+"."+simID+".vcf", simplifyNucleotides=F);
+}
+
